@@ -93,53 +93,95 @@ export default function App() {
   const [searchDate, setSearchDate] = useState(format(new Date(), 'yyyy-MM-dd'));
 
   // Load Data
-  useEffect(() => {
-    const savedTeachers = localStorage.getItem('semeland_teachers');
-    if (savedTeachers) {
-      setTeachers(JSON.parse(savedTeachers));
-    } else {
-      const initial = INITIAL_TEACHERS.map(name => ({ id: Math.random().toString(36).substr(2, 9), name }));
-      setTeachers(initial);
-      localStorage.setItem('semeland_teachers', JSON.stringify(initial));
+  const fetchData = async () => {
+    try {
+      const [teachersRes, recordsRes] = await Promise.all([
+        fetch('/api/teachers'),
+        fetch('/api/records')
+      ]);
+      
+      const teachersData = await teachersRes.json();
+      const recordsData = await recordsRes.json();
+      
+      if (teachersData.length === 0) {
+        // Seed initial teachers if none exist
+        const initial = INITIAL_TEACHERS.map(name => ({ id: Math.random().toString(36).substr(2, 9), name }));
+        for (const t of initial) {
+          await fetch('/api/teachers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(t)
+          });
+        }
+        setTeachers(initial);
+      } else {
+        setTeachers(teachersData);
+      }
+      
+      setRecords(recordsData);
+    } catch (error) {
+      console.error('Failed to fetch data:', error);
     }
+  };
 
-    const savedRecords = localStorage.getItem('semeland_records');
-    if (savedRecords) {
-      setRecords(JSON.parse(savedRecords));
-    }
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 5000); // Poll every 5 seconds
+    return () => clearInterval(interval);
   }, []);
 
-  // Save Data
-  useEffect(() => {
-    if (teachers.length > 0) localStorage.setItem('semeland_teachers', JSON.stringify(teachers));
-  }, [teachers]);
-
-  useEffect(() => {
-    localStorage.setItem('semeland_records', JSON.stringify(records));
-  }, [records]);
-
   // --- Handlers ---
-  const addRecord = (newRecord: Omit<AbsenceRecord, 'id' | 'createdAt'>) => {
+  const addRecord = async (newRecord: Omit<AbsenceRecord, 'id' | 'createdAt'>) => {
     const record: AbsenceRecord = {
       ...newRecord,
       id: Math.random().toString(36).substr(2, 9),
       createdAt: new Date().toISOString()
     };
-    setRecords(prev => [record, ...prev]);
+    
+    try {
+      await fetch('/api/records', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(record)
+      });
+      setRecords(prev => [record, ...prev]);
+    } catch (error) {
+      console.error('Failed to add record:', error);
+    }
   };
 
-  const deleteRecord = (id: string) => {
-    setRecords(prev => prev.filter(r => r.id !== id));
+  const deleteRecord = async (id: string) => {
+    try {
+      await fetch(`/api/records/${id}`, { method: 'DELETE' });
+      setRecords(prev => prev.filter(r => r.id !== id));
+    } catch (error) {
+      console.error('Failed to delete record:', error);
+    }
   };
 
-  const addTeacher = (name: string) => {
+  const addTeacher = async (name: string) => {
     if (!name.trim()) return;
     const newTeacher = { id: Math.random().toString(36).substr(2, 9), name };
-    setTeachers(prev => [...prev, newTeacher]);
+    
+    try {
+      await fetch('/api/teachers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newTeacher)
+      });
+      setTeachers(prev => [...prev, newTeacher]);
+    } catch (error) {
+      console.error('Failed to add teacher:', error);
+    }
   };
 
-  const deleteTeacher = (id: string) => {
-    setTeachers(prev => prev.filter(t => t.id !== id));
+  const deleteTeacher = async (id: string) => {
+    try {
+      await fetch(`/api/teachers/${id}`, { method: 'DELETE' });
+      setTeachers(prev => prev.filter(t => t.id !== id));
+    } catch (error) {
+      console.error('Failed to delete teacher:', error);
+    }
   };
 
   // --- Computed Stats ---

@@ -46,18 +46,6 @@ db.exec(`
   );
 `);
 
-// Seed Teachers if empty
-const teacherCount = db.prepare("SELECT COUNT(*) as count FROM teachers").get() as { count: number };
-if (teacherCount.count === 0) {
-  const insert = db.prepare("INSERT INTO teachers (id, name) VALUES (?, ?)");
-  const transaction = db.transaction((teachers) => {
-    for (const name of teachers) {
-      insert.run(Math.random().toString(36).substr(2, 9), name);
-    }
-  });
-  transaction(INITIAL_TEACHERS);
-}
-
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -66,8 +54,27 @@ async function startServer() {
 
   // API Routes
   app.get("/api/teachers", (req, res) => {
-    const teachers = db.prepare("SELECT * FROM teachers ORDER BY name ASC").all();
-    res.json(teachers);
+    try {
+      let teachers = db.prepare("SELECT * FROM teachers ORDER BY name ASC").all();
+      
+      // Fallback seeding if empty
+      if (teachers.length === 0) {
+        console.log("Seeding teachers...");
+        const insert = db.prepare("INSERT INTO teachers (id, name) VALUES (?, ?)");
+        const transaction = db.transaction((list) => {
+          for (const name of list) {
+            insert.run(Math.random().toString(36).substr(2, 9), name);
+          }
+        });
+        transaction(INITIAL_TEACHERS);
+        teachers = db.prepare("SELECT * FROM teachers ORDER BY name ASC").all();
+      }
+      
+      res.json(teachers);
+    } catch (error) {
+      console.error("Error fetching teachers:", error);
+      res.status(500).json({ error: "Internal Server Error" });
+    }
   });
 
   app.post("/api/teachers", (req, res) => {

@@ -16,7 +16,8 @@ import {
   Plus,
   CheckCircle2,
   AlertCircle,
-  School
+  School,
+  RefreshCw
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -94,6 +95,7 @@ export default function App() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   // Load Data
   const fetchData = async () => {
@@ -103,21 +105,27 @@ export default function App() {
         fetch('/api/records')
       ]);
       
-      if (!teachersRes.ok || !recordsRes.ok) {
-        throw new Error(`Ralat sambungan: ${teachersRes.status}`);
+      if (teachersRes.status === 429 || recordsRes.status === 429) {
+        throw new Error('Terlalu banyak permintaan. Sila tunggu sebentar.');
+      }
+
+      if (!teachersRes.ok) {
+        throw new Error(`Ralat Guru: ${teachersRes.status}`);
+      }
+      if (!recordsRes.ok) {
+        throw new Error(`Ralat Rekod: ${recordsRes.status}`);
       }
 
       const teachersData = await teachersRes.json();
       const recordsData = await recordsRes.json();
       
-      if (Array.isArray(teachersData) && teachersData.length > 0) {
-        // Only update if data actually changed to prevent UI flickers/resets
+      if (Array.isArray(teachersData)) {
         setTeachers(prev => {
           if (JSON.stringify(prev) === JSON.stringify(teachersData)) return prev;
           return teachersData;
         });
-        localStorage.setItem('semeland_teachers_cache', JSON.stringify(teachersData));
         setError(null);
+        setRetryCount(0); // Reset retry on success
       }
 
       if (Array.isArray(recordsData)) {
@@ -125,40 +133,40 @@ export default function App() {
           if (JSON.stringify(prev) === JSON.stringify(recordsData)) return prev;
           return recordsData;
         });
-        localStorage.setItem('semeland_records_cache', JSON.stringify(recordsData));
       }
       setIsLoading(false);
     } catch (error) {
       console.error('Failed to fetch data:', error);
-      
-      // Fallback to Cache or Initial List
-      const cachedTeachers = localStorage.getItem('semeland_teachers_cache');
-      const cachedRecords = localStorage.getItem('semeland_records_cache');
-      
-      if (cachedTeachers) {
-        const parsed = JSON.parse(cachedTeachers);
-        setTeachers(prev => JSON.stringify(prev) === JSON.stringify(parsed) ? prev : parsed);
-      } else if (teachers.length === 0) {
-        // Only set initial if we have nothing else
-        const initial = INITIAL_TEACHERS.map((name, i) => ({ id: `t-${i}`, name }));
-        setTeachers(initial);
-      }
-      
-      if (cachedRecords) {
-        const parsed = JSON.parse(cachedRecords);
-        setRecords(prev => JSON.stringify(prev) === JSON.stringify(parsed) ? prev : parsed);
-      }
-
-      setError('Mod Luar Talian: Gagal menyambung ke pelayan.');
+      const msg = error instanceof Error ? error.message : 'Gagal memuatkan data';
+      setError(msg);
       setIsLoading(false);
+      // Increment retry count to slow down polling on error
+      setRetryCount(prev => Math.min(prev + 1, 10));
     }
   };
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 5000); // Poll every 5 seconds
-    return () => clearInterval(interval);
-  }, []);
+    
+    let timeoutId: NodeJS.Timeout;
+    
+    const poll = () => {
+      // Exponential backoff: 30s, 60s, 90s... up to 5 mins
+      const delay = Math.min(30000 + (retryCount * 30000), 300000);
+      
+      timeoutId = setTimeout(() => {
+        if (document.visibilityState === 'visible') {
+          fetchData().then(poll);
+        } else {
+          poll();
+        }
+      }, delay);
+    };
+
+    poll();
+    
+    return () => clearTimeout(timeoutId);
+  }, [retryCount]);
 
   // --- Handlers ---
   const addRecord = async (newRecord: Omit<AbsenceRecord, 'id' | 'createdAt'>) => {
@@ -242,18 +250,7 @@ export default function App() {
             <img src="https://i.imgur.com/r6TqmA5.png" alt="Logo Sekolah" className="max-w-full max-h-full object-contain" />
           </motion.div>
           <div className="text-center md:text-left flex-1">
-            <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 mb-1">
-              <h1 className="text-3xl md:text-4xl font-bold tracking-tight">SISTEM e-KEBERADAAN GURU SEMELAND</h1>
-              <div className={cn(
-                "inline-flex items-center self-center md:self-auto gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border",
-                error 
-                  ? "bg-red-500/20 text-red-100 border-red-500/30" 
-                  : "bg-emerald-500/20 text-emerald-100 border-emerald-500/30"
-              )}>
-                <div className={cn("w-2 h-2 rounded-full", error ? "bg-red-400 animate-pulse" : "bg-emerald-400")} />
-                {error ? "Offline" : "Online"}
-              </div>
-            </div>
+            <h1 className="text-3xl md:text-4xl font-bold tracking-tight">SISTEM e-KEBERADAAN GURU SEMELAND</h1>
             <p className="text-blue-100 font-medium text-lg">SMK LANDAS, 21820 AJIL, TERENGGANU</p>
             <div className="mt-3 inline-block bg-blue-400/30 backdrop-blur-md px-4 py-1 rounded-full border border-white/20">
               <span className="text-sm font-semibold tracking-wide italic">“CERIA UNTUK TENANG EMOSI, SEMELAND CUTE”</span>
@@ -310,11 +307,21 @@ export default function App() {
               <div className="grid md:grid-cols-3 gap-8">
                 {/* Form Section */}
                 <div className="md:col-span-2 bg-white rounded-3xl shadow-sm border border-slate-200 p-8">
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="p-3 bg-blue-100 text-blue-600 rounded-xl">
-                      <Plus className="w-6 h-6" />
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-3 bg-blue-100 text-blue-600 rounded-xl">
+                        <Plus className="w-6 h-6" />
+                      </div>
+                      <h2 className="text-2xl font-bold text-slate-800">Borang Ketidakhadiran</h2>
                     </div>
-                    <h2 className="text-2xl font-bold text-slate-800">Borang Ketidakhadiran</h2>
+                    <button 
+                      onClick={() => fetchData()}
+                      disabled={isLoading}
+                      className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                      title="Segarkan Data"
+                    >
+                      <RefreshCw className={cn("w-5 h-5", isLoading && "animate-spin")} />
+                    </button>
                   </div>
                   <AbsenceForm teachers={teachers} onSubmit={addRecord} error={error} />
                 </div>

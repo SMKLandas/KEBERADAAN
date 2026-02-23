@@ -52,6 +52,23 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Health Check
+  app.get("/api/health", (req, res) => {
+    try {
+      const teacherCount = db.prepare("SELECT COUNT(*) as count FROM teachers").get() as { count: number };
+      const recordCount = db.prepare("SELECT COUNT(*) as count FROM records").get() as { count: number };
+      res.json({ 
+        status: "ok", 
+        database: "connected", 
+        teachers: teacherCount.count,
+        records: recordCount.count,
+        time: new Date().toISOString()
+      });
+    } catch (error) {
+      res.status(500).json({ status: "error", message: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
   // API Routes
   app.get("/api/teachers", (req, res) => {
     try {

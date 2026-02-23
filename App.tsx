@@ -103,21 +103,7 @@ export default function App() {
       const teachersData = await teachersRes.json();
       const recordsData = await recordsRes.json();
       
-      if (teachersData.length === 0) {
-        // Seed initial teachers if none exist
-        const initial = INITIAL_TEACHERS.map(name => ({ id: Math.random().toString(36).substr(2, 9), name }));
-        for (const t of initial) {
-          await fetch('/api/teachers', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(t)
-          });
-        }
-        setTeachers(initial);
-      } else {
-        setTeachers(teachersData);
-      }
-      
+      setTeachers(teachersData);
       setRecords(recordsData);
     } catch (error) {
       console.error('Failed to fetch data:', error);

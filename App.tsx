@@ -111,40 +111,45 @@ export default function App() {
       const recordsData = await recordsRes.json();
       
       if (Array.isArray(teachersData) && teachersData.length > 0) {
-        setTeachers(teachersData);
+        // Only update if data actually changed to prevent UI flickers/resets
+        setTeachers(prev => {
+          if (JSON.stringify(prev) === JSON.stringify(teachersData)) return prev;
+          return teachersData;
+        });
         localStorage.setItem('semeland_teachers_cache', JSON.stringify(teachersData));
         setError(null);
-      } else if (teachersData.length === 0) {
-        // If server returns empty, but we have cache, use it
-        const cache = localStorage.getItem('semeland_teachers_cache');
-        if (cache) setTeachers(JSON.parse(cache));
       }
 
       if (Array.isArray(recordsData)) {
-        setRecords(recordsData);
+        setRecords(prev => {
+          if (JSON.stringify(prev) === JSON.stringify(recordsData)) return prev;
+          return recordsData;
+        });
         localStorage.setItem('semeland_records_cache', JSON.stringify(recordsData));
       }
       setIsLoading(false);
     } catch (error) {
       console.error('Failed to fetch data:', error);
       
-      // Fallback to Cache
+      // Fallback to Cache or Initial List
       const cachedTeachers = localStorage.getItem('semeland_teachers_cache');
       const cachedRecords = localStorage.getItem('semeland_records_cache');
       
       if (cachedTeachers) {
-        setTeachers(JSON.parse(cachedTeachers));
-      } else {
-        // Ultimate fallback to initial list
-        const initial = INITIAL_TEACHERS.map(name => ({ id: Math.random().toString(36).substr(2, 9), name }));
+        const parsed = JSON.parse(cachedTeachers);
+        setTeachers(prev => JSON.stringify(prev) === JSON.stringify(parsed) ? prev : parsed);
+      } else if (teachers.length === 0) {
+        // Only set initial if we have nothing else
+        const initial = INITIAL_TEACHERS.map((name, i) => ({ id: `t-${i}`, name }));
         setTeachers(initial);
       }
       
       if (cachedRecords) {
-        setRecords(JSON.parse(cachedRecords));
+        const parsed = JSON.parse(cachedRecords);
+        setRecords(prev => JSON.stringify(prev) === JSON.stringify(parsed) ? prev : parsed);
       }
 
-      setError('Mod Luar Talian: Gagal menyambung ke pelayan. Data mungkin tidak selari.');
+      setError('Mod Luar Talian: Gagal menyambung ke pelayan.');
       setIsLoading(false);
     }
   };

@@ -100,11 +100,22 @@ export default function App() {
         fetch('/api/records')
       ]);
       
+      if (!teachersRes.ok || !recordsRes.ok) {
+        throw new Error(`HTTP error! status: ${teachersRes.status}`);
+      }
+
       const teachersData = await teachersRes.json();
       const recordsData = await recordsRes.json();
       
-      setTeachers(teachersData);
-      setRecords(recordsData);
+      if (Array.isArray(teachersData)) {
+        setTeachers(teachersData);
+      } else {
+        console.error('Teachers data is not an array:', teachersData);
+      }
+
+      if (Array.isArray(recordsData)) {
+        setRecords(recordsData);
+      }
     } catch (error) {
       console.error('Failed to fetch data:', error);
     }
@@ -490,9 +501,13 @@ function AbsenceForm({ teachers, onSubmit }: { teachers: Teacher[], onSubmit: (r
             className="w-full bg-slate-50 border-slate-200 rounded-2xl p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
           >
             <option value="">-- Pilih Guru --</option>
-            {teachers.sort((a, b) => a.name.localeCompare(b.name)).map(t => (
-              <option key={t.id} value={t.id}>{t.name}</option>
-            ))}
+            {teachers.length > 0 ? (
+              [...teachers].sort((a, b) => a.name.localeCompare(b.name)).map(t => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))
+            ) : (
+              <option disabled>Memuatkan senarai guru...</option>
+            )}
           </select>
         </div>
 

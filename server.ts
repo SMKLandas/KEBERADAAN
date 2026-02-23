@@ -46,6 +46,20 @@ db.exec(`
   );
 `);
 
+// Seed Teachers if empty
+const teacherCount = db.prepare("SELECT COUNT(*) as count FROM teachers").get() as { count: number };
+if (teacherCount.count === 0) {
+  console.log("Seeding initial teachers...");
+  const insert = db.prepare("INSERT INTO teachers (id, name) VALUES (?, ?)");
+  const transaction = db.transaction((list) => {
+    for (let i = 0; i < list.length; i++) {
+      // Use stable IDs based on index for the initial seed
+      insert.run(`t-${i}`, list[i]);
+    }
+  });
+  transaction(INITIAL_TEACHERS);
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -74,13 +88,12 @@ async function startServer() {
     try {
       let teachers = db.prepare("SELECT * FROM teachers ORDER BY name ASC").all();
       
-      // Fallback seeding if empty
+      // Fallback seeding if empty (extra safety)
       if (teachers.length === 0) {
-        console.log("Seeding teachers...");
         const insert = db.prepare("INSERT INTO teachers (id, name) VALUES (?, ?)");
         const transaction = db.transaction((list) => {
-          for (const name of list) {
-            insert.run(Math.random().toString(36).substr(2, 9), name);
+          for (let i = 0; i < list.length; i++) {
+            insert.run(`t-${i}`, list[i]);
           }
         });
         transaction(INITIAL_TEACHERS);

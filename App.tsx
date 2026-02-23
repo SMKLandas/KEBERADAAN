@@ -92,6 +92,9 @@ export default function App() {
   const [records, setRecords] = useState<AbsenceRecord[]>([]);
   const [searchDate, setSearchDate] = useState(format(new Date(), 'yyyy-MM-dd'));
 
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   // Load Data
   const fetchData = async () => {
     try {
@@ -101,23 +104,48 @@ export default function App() {
       ]);
       
       if (!teachersRes.ok || !recordsRes.ok) {
-        throw new Error(`HTTP error! status: ${teachersRes.status}`);
+        throw new Error(`Ralat sambungan: ${teachersRes.status}`);
       }
 
       const teachersData = await teachersRes.json();
       const recordsData = await recordsRes.json();
       
-      if (Array.isArray(teachersData)) {
+      if (Array.isArray(teachersData) && teachersData.length > 0) {
         setTeachers(teachersData);
-      } else {
-        console.error('Teachers data is not an array:', teachersData);
+        localStorage.setItem('semeland_teachers_cache', JSON.stringify(teachersData));
+        setError(null);
+      } else if (teachersData.length === 0) {
+        // If server returns empty, but we have cache, use it
+        const cache = localStorage.getItem('semeland_teachers_cache');
+        if (cache) setTeachers(JSON.parse(cache));
       }
 
       if (Array.isArray(recordsData)) {
         setRecords(recordsData);
+        localStorage.setItem('semeland_records_cache', JSON.stringify(recordsData));
       }
+      setIsLoading(false);
     } catch (error) {
       console.error('Failed to fetch data:', error);
+      
+      // Fallback to Cache
+      const cachedTeachers = localStorage.getItem('semeland_teachers_cache');
+      const cachedRecords = localStorage.getItem('semeland_records_cache');
+      
+      if (cachedTeachers) {
+        setTeachers(JSON.parse(cachedTeachers));
+      } else {
+        // Ultimate fallback to initial list
+        const initial = INITIAL_TEACHERS.map(name => ({ id: Math.random().toString(36).substr(2, 9), name }));
+        setTeachers(initial);
+      }
+      
+      if (cachedRecords) {
+        setRecords(JSON.parse(cachedRecords));
+      }
+
+      setError('Mod Luar Talian: Gagal menyambung ke pelayan. Data mungkin tidak selari.');
+      setIsLoading(false);
     }
   };
 
@@ -208,9 +236,20 @@ export default function App() {
           >
             <img src="https://i.imgur.com/r6TqmA5.png" alt="Logo Sekolah" className="max-w-full max-h-full object-contain" />
           </motion.div>
-          <div className="text-center md:text-left">
-            <h1 className="text-3xl md:text-4xl font-bold tracking-tight">SISTEM e-KEBERADAAN GURU SEMELAND</h1>
-            <p className="text-blue-100 mt-1 font-medium text-lg">SMK LANDAS, 21820 AJIL, TERENGGANU</p>
+          <div className="text-center md:text-left flex-1">
+            <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 mb-1">
+              <h1 className="text-3xl md:text-4xl font-bold tracking-tight">SISTEM e-KEBERADAAN GURU SEMELAND</h1>
+              <div className={cn(
+                "inline-flex items-center self-center md:self-auto gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border",
+                error 
+                  ? "bg-red-500/20 text-red-100 border-red-500/30" 
+                  : "bg-emerald-500/20 text-emerald-100 border-emerald-500/30"
+              )}>
+                <div className={cn("w-2 h-2 rounded-full", error ? "bg-red-400 animate-pulse" : "bg-emerald-400")} />
+                {error ? "Offline" : "Online"}
+              </div>
+            </div>
+            <p className="text-blue-100 font-medium text-lg">SMK LANDAS, 21820 AJIL, TERENGGANU</p>
             <div className="mt-3 inline-block bg-blue-400/30 backdrop-blur-md px-4 py-1 rounded-full border border-white/20">
               <span className="text-sm font-semibold tracking-wide italic">“CERIA UNTUK TENANG EMOSI, SEMELAND CUTE”</span>
             </div>
@@ -272,7 +311,7 @@ export default function App() {
                     </div>
                     <h2 className="text-2xl font-bold text-slate-800">Borang Ketidakhadiran</h2>
                   </div>
-                  <AbsenceForm teachers={teachers} onSubmit={addRecord} />
+                  <AbsenceForm teachers={teachers} onSubmit={addRecord} error={error} />
                 </div>
 
                 {/* Quick Stats Section */}
@@ -453,7 +492,7 @@ function TabButton({ active, onClick, icon, label, color }: { active: boolean, o
   );
 }
 
-function AbsenceForm({ teachers, onSubmit }: { teachers: Teacher[], onSubmit: (record: any) => void }) {
+function AbsenceForm({ teachers, onSubmit, error }: { teachers: Teacher[], onSubmit: (record: any) => void, error: string | null }) {
   const [formData, setFormData] = useState({
     teacherId: '',
     startDate: '',
@@ -506,9 +545,14 @@ function AbsenceForm({ teachers, onSubmit }: { teachers: Teacher[], onSubmit: (r
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))
             ) : (
-              <option disabled>Memuatkan senarai guru...</option>
+              <option disabled>{error ? error : 'Memuatkan senarai guru...'}</option>
             )}
           </select>
+          {error && (
+            <p className="text-xs text-red-500 mt-1 font-medium flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" /> {error}
+            </p>
+          )}
         </div>
 
         <div className="space-y-2">

@@ -7,6 +7,25 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const db = new Database("database.sqlite");
 
+const INITIAL_TEACHERS = [
+  "Cg. Azman bin Mohd Nor @ Harun", "Cg. Wan Johari bin Wan Gati", "Cg. Abdullah bin Ab Rahman",
+  "Cg. Shaylatulazwin binti Abdul Wahid", "Cg. Anuar Ruddin bin Salleh", "Cg. Zalina binti Omar",
+  "Cg. Mohd Kamal bin Harun", "Cg. Mohd Shamsuddin bin Othman", "Cg. Alimien bin Muda",
+  "Ust. Ismail bin Salleh", "Cg. Mohammad Syafiq bin Abdul Majeed", "Cg. Mohd Hamidi bin Mohd Noor",
+  "Cg. Dul – Rosidi bin Ahmad", "Cg. Mohd Khalis bin Abd. Malik", "Cg. Amirul Shahadam bin Suhasmadi",
+  "Cg. Mohd Rizuan bin Ibrahim", "Cg. Nasharuddin bin Ngah", "Cg. Mohd Faizal bin Mohd Noor",
+  "Cg. Mohd Shufian bin Abdul Kadir", "Cg. Nor Azimah binti Rokman", "Cg. Farida Hamimi binti Muhamad Saidi",
+  "Ustz. Hasni binti Baba", "Cg. Juliani binti Mansor", "Cg. Kartini binti Abdul Rahim",
+  "Cg. Noordiana binti Abdul Aziz", "Cg. Nor Hamiza binti Ramli", "Cg. Noorazlina binti Ismail",
+  "Cg. Norul Hazlinda bt. Romli", "Cg. Hibatul ’ Atikah binti Khairul Anuar", "Cg. Nur Faizzatul Ain binti Othman",
+  "Cg. Rosharizam binti Abd. Ghani", "Ustz. Rosmawati binti Mamat", "Cg. Rusmaniza binti Jusoh",
+  "Cg. Sazilawati binti Yusof", "Cg. Saidatul Asima binti Kamarulzaman Shah", "Cg. Siti Halimah binti Ab. Halim",
+  "Cg. Siti Saniah binti Idris", "Cg. Suriani binti Muda", "Ustz Rohana binti Awang",
+  "Cg. Wan Nor Azlinda bt. Wan Abd. Aziz", "Cg. Amirah Nasuha binti Suhaimi", "Cg. Suhaila Afiqah binti Mohd Nasir",
+  "Cg. Nurul Najibah binti Musameh", "Cg. Iza Amirah binti Muhamad Zawahir", "Cg. Nurzahidatullazura binti Amzah",
+  "Cg. Azizah binti Ismail"
+];
+
 // Initialize Database
 db.exec(`
   CREATE TABLE IF NOT EXISTS teachers (
@@ -26,6 +45,18 @@ db.exec(`
     createdAt TEXT NOT NULL
   );
 `);
+
+// Seed Teachers if empty
+const teacherCount = db.prepare("SELECT COUNT(*) as count FROM teachers").get() as { count: number };
+if (teacherCount.count === 0) {
+  const insert = db.prepare("INSERT INTO teachers (id, name) VALUES (?, ?)");
+  const transaction = db.transaction((teachers) => {
+    for (const name of teachers) {
+      insert.run(Math.random().toString(36).substr(2, 9), name);
+    }
+  });
+  transaction(INITIAL_TEACHERS);
+}
 
 async function startServer() {
   const app = express();
